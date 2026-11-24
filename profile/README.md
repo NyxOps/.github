@@ -72,4 +72,4 @@ NyxOps is licensed under Apache-2.0.
 
 ## Learn more
 
-The architecture specification and design documents live in [nyx-design](https://github.com/NyxOps/nyx-design).
+The architecture specification and design documents live in [nyxops](https://github.com/NyxOps/nyxops).
