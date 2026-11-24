@@ -1,175 +1,75 @@
 # NyxOps
 
-**NyxOps** is an open source records management platform for law enforcement agencies, designed to provide a modern, secure, self-hostable alternative to expensive commercial RMS systems.
+NyxOps is a free, open source records management system (RMS) for law enforcement agencies. It's built for small and mid-sized departments that need modern, secure records software they can run on their own infrastructure, without the cost of commercial RMS contracts.
 
-The project is currently in early development and focuses on building a modular foundation for incident reporting, person records, arrests, evidence tracking, warrants, audit logging, and standards-oriented reporting workflows.
+> Status: early development. NyxOps isn't ready for production use.
 
-> Status: Early development / architecture phase
+## What NyxOps does
 
-## Project Overview
+- Incident reporting with narratives, attachments, and an investigation workflow
+- Person and vehicle records, with a master person index that detects likely duplicates for human review
+- Arrest and booking records, charges, and mugshots
+- Evidence tracking with a verifiable chain of custody
+- Warrant tracking with expiration alerts
+- NIBRS reporting, with validation errors shown while the officer writes the report instead of at month-end
+- Records retention, legal holds, and court-ordered sealing and expungement
+- Report drafting that keeps working when the patrol car loses its connection
+- Multi-agency deployments with strict separation between agencies
 
-NyxOps is a spiritual successor to the earlier Blue-Link and other records management projects, rebuilt with a more modern, scalable, and cloud-native architecture.
+## Accountability built in
 
-The long-term goal is to create a free and extensible Records Management System (RMS) that can support small and mid-sized agencies with:
+NyxOps records every access to and change of a record in an audit log built on the same Merkle tree design as Certificate Transparency. Each agency can have an outside party, such as a state auditor or a court clerk, cosign the log at regular intervals. After that, nobody, including a database administrator, can edit or delete an audit entry without breaking the cryptographic proof.
 
-- Incident and case reporting
-- Person, vehicle, and arrest records
-- Evidence management and chain of custody
-- Warrant tracking
-- Role-based access control
-- Immutable audit logging
-- NIBRS-oriented validation and export workflows
-- Multi-agency / multi-tenant deployments
-- Self-hosted deployment using Docker and Kubernetes
+Expungement reaches backups too. Every sealed record group has its own encryption key, and destroying that key makes the record unreadable in the live database and in every backup taken before the order.
 
-## Why NyxOps?
+## Architecture
 
-Many smaller agencies rely on outdated, expensive, or fragmented systems for records management. NyxOps aims to provide:
+NyxOps ships as a single Go program that serves the API, the web interface, and background jobs. PostgreSQL holds all application data, the job queue, search indexes, and the audit log, so a small agency runs four containers or fewer.
 
-- **Open source access**: transparent, auditable, and community-driven development
-- **Modern architecture**: built with current web, API, and infrastructure tooling
-- **Security-first design**: authentication, authorization, auditability, and tenant isolation from the start
-- **Self-hostability**: designed for agencies that need control over their own infrastructure
-- **Extensibility**: modular services and APIs for future integrations
+```mermaid
+flowchart LR
+    browser["Web browser"] -- HTTPS --> nyx["nyx (Go)"]
+    nyx -- sign-in --> idp["Identity provider (agency's own, or bundled Zitadel)"]
+    nyx --> pg[("PostgreSQL")]
+    nyx --> files[("Evidence files: local disk or S3-compatible storage")]
+```
 
-## Technology Stack
+Agencies that already use Microsoft Entra ID, Okta, or another OpenID Connect provider sign in with their existing accounts. Larger and multi-agency deployments run on Kubernetes.
 
-NyxOps is planned around the following stack:
+## Technology
 
 | Layer | Technology |
 | --- | --- |
-| Frontend | Next.js, React, TypeScript, Tailwind CSS |
-| Backend API | FastAPI, Python |
-| Database | PostgreSQL |
-| ORM / Migrations | SQLAlchemy, Alembic |
-| Authentication | Keycloak, OpenID Connect / OAuth2 |
-| Cache | Redis |
-| Task Queue | Celery |
-| Message Broker | RabbitMQ |
-| Object Storage | MinIO / S3-compatible storage |
-| Search | Meilisearch |
-| Containerization | Docker, Docker Compose |
-| Orchestration | Kubernetes / Helm |
-| CI/CD | GitHub Actions |
-| Monitoring | Prometheus, Grafana |
-| Logging | Loki, Grafana |
+| Backend and workers | Go |
+| Database | PostgreSQL 18 |
+| Background jobs | River (PostgreSQL-backed) |
+| Frontend | React, TanStack Router and Query, shadcn/ui, Tailwind CSS |
+| Sign-in | OpenID Connect; Zitadel bundled for agencies without an identity provider |
+| File storage | Local disk or any S3-compatible service |
+| Search | PostgreSQL full-text and fuzzy name search |
+| Rules and policies | CEL (Common Expression Language) |
+| Report documents | Typst |
+| Deployment | Docker Compose, Kubernetes (Helm) |
 
-## Planned Core Modules
+NyxOps keeps its dependency list short on purpose: the production server depends on six outside Go modules. Security-sensitive logic that defines an RMS, such as access control, auditing, NIBRS validation, and retention, lives in the NyxOps codebase where anyone can review it.
 
-NyxOps is being designed as a modular system. Planned modules include:
+## Security
 
-### Incident Management
+NyxOps targets the FBI CJIS Security Policy from the first line of code.
 
-- Create, update, and soft-delete incident reports
-- Link persons, vehicles, evidence, and arrests
-- Track incident status and investigation workflow
-- Maintain report narratives and revisions
+- PostgreSQL row-level security enforces separation between agencies and access to sealed and juvenile records, in addition to checks in the application.
+- Access to sensitive records requires a stated reason, which goes into the audit log.
+- The audit log is append-only and verifiable by outside witnesses the agency chooses.
+- Sensitive fields and evidence files are encrypted with per-record keys.
+- The browser never holds sign-in tokens; sessions use secure, HttpOnly cookies.
+- Cryptography comes from Go's FIPS 140-3 module.
+- Every release includes a software bill of materials, a signed container image, and build provenance.
+- Installation generates every secret; NyxOps has no default passwords.
 
-### Person Records
+## License
 
-- Master person index
-- Demographics and physical descriptors
-- Aliases and linked records
-- Associated incidents, arrests, warrants, and prior records
+NyxOps is licensed under Apache-2.0.
 
-### Arrest and Booking
+## Learn more
 
-- Arrest records linked to incidents and persons
-- Charges, statutes, and offense descriptions
-- Booking workflow support
-- Mugshot and property inventory support
-
-### Evidence Management
-
-- Evidence item registration
-- Chain of custody tracking
-- Storage location management
-- File attachments for photos, reports, and media
-- Disposal workflow support
-
-### Warrant Management
-
-- Warrant creation and tracking
-- Statuses such as active, served, recalled, and expired
-- Expiration notifications and review workflows
-
-### Reporting and Exports
-
-- NIBRS-oriented validation
-- Monthly and annual reporting workflows
-- Export formats such as CSV, JSON, and PDF
-
-### Audit and Compliance
-
-- Audit logging for record access and changes
-- Role-based access control
-- Session and user activity tracking
-- Data retention and purge policy support
-
-## Architecture Goals
-
-NyxOps is designed around the following engineering principles:
-
-- **Service-oriented architecture**
-- **Clear separation between frontend, API, workers, storage, and identity**
-- **Database-level tenant isolation using PostgreSQL row-level security where applicable**
-- **Secure-by-default authentication and authorization**
-- **Immutable audit trail for sensitive actions**
-- **Container-first local development**
-- **Infrastructure that can scale from a single-server deployment to Kubernetes**
-
-## Current Development Status
-
-The project is currently in the early setup and architecture phase.
-
-Current focus areas:
-
-- Repository organization
-- Service boundaries
-- Docker Compose development environment
-- Base frontend and backend scaffolding
-- API structure
-- Authentication planning
-- Database schema planning
-- Documentation and project specifications
-
-This project is not production-ready.
-
-## Repository Structure
-
-The organization may contain multiple repositories as the system evolves:
-
-| Repository | Purpose |
-| --- | --- |
-| `nyx-web` | Frontend application |
-| `nyx-api` | Backend API service |
-| `nyx-infra` | Docker Compose, Kubernetes, and deployment configuration |
-| `nyx-design` | Documentation, specifications, and architecture notes |
-| `nyx-worker` | Celery + RabbitMQ worker layer |
-
-Repository names may change as the project matures.
-
-## Local Development
-
-Local development is planned to use Docker Compose.
-
-A typical local environment will include:
-
-- Next.js frontend
-- FastAPI backend
-- PostgreSQL database
-- Redis cache
-- RabbitMQ message broker
-- Celery worker
-- Keycloak identity provider
-- MinIO object storage
-- Meilisearch search service
-
-```bash
-git clone https://github.com/NyxOps/nyx-infra.git
-cd nyx-infra
-make dev       # start everything
-make stop      # tear down
-make logs      # tail all logs
-make migrate   # run alembic migrations
-make env-setup # update variables in .env to be randomized & secure
+The architecture specification and design documents live in [nyx-design](https://github.com/NyxOps/nyx-design).
